@@ -74,7 +74,7 @@ module Tus
 
           no_content!
         end
-
+        
         # POST /
         r.post do
           validate_upload_length! unless request.headers["Upload-Concat"].to_s.start_with?("final") || request.headers["Upload-Defer-Length"] == "1"
@@ -112,7 +112,7 @@ module Tus
           created!(file_url)
         end
       end
-
+    
       r.is String do |uid|
         # OPTIONS /{uid}
         r.options do
@@ -126,14 +126,9 @@ module Tus
           no_content!
         end
 
-        begin
-          info = Tus::Info.new(storage.read_info(uid))
-        rescue Tus::NotFound
-          error!(404, "Upload Not Found")
-        end
-
         # HEAD /{uid}
         r.head do
+          info = detect_info(storage, uid)
           response.headers.update(info.headers)
           response.headers["Cache-Control"] = "no-store"
 
@@ -142,6 +137,7 @@ module Tus
 
         # PATCH /{uid}
         r.patch do
+          info = detect_info(storage, uid)
           if info.defer_length? && request.headers["Upload-Length"]
             validate_upload_length!
 
@@ -183,39 +179,47 @@ module Tus
 
         # GET /{uid}
         r.get do
-          validate_upload_finished!(info)
+          #validate_upload_finished!(info)
+          info = detect_info(permanent_storage, uid)
 
-          if redirect_download
-            redirect_url = instance_exec(uid, info.to_h,
-              content_type:        info.type,
-              content_disposition: ContentDisposition.(disposition: opts[:disposition], filename: info.name),
-              &redirect_download)
+          #if redirect_download
+          #  redirect_url = instance_exec(uid, info.to_h,
+          #    content_type:        info.type,
+          #    content_disposition: ContentDisposition.(disposition: opts[:disposition], filename: info.name),
+          #    &redirect_download)
 
-            r.redirect redirect_url
-          else
+          #  r.redirect redirect_url
+          #else
             range = handle_range_request!(info.length)
 
             response.headers["Content-Disposition"] = ContentDisposition.(disposition: opts[:disposition], filename: info.name)
             response.headers["Content-Type"]        = info.type if info.type
             response.headers["ETag"]                = %(W/"#{uid}")
 
-            body = storage.get_file(uid, info.to_h, range: range)
+            body = permanent_storage.get_file(uid, info.to_h, range: range)
 
             r.halt response.finish_with_body(body)
-          end
+          #end
         end
 
         # DELETE /{uid}
         r.delete do
+          info = detect_info(storage, uid)
           storage.delete_file(uid, info.to_h)
 
           after_terminate(uid, info)
 
           no_content!
         end
-      end
+      end 
     end
 
+    def detect_info(current_storage, uid)
+      Tus::Info.new(current_storage.read_info(uid))
+    rescue Tus::NotFound
+      error!(404, "Upload Not Found")
+    end
+    
     # Wraps the Rack input (request body) into a Tus::Input object, applying a
     # size limit if one exists.
     def get_input(info)
@@ -424,6 +428,10 @@ module Tus
     def storage
       opts[:storage] || Tus::Storage::Filesystem.new("data")
     end
+    
+    def permanent_storage
+      opts[:permanent_storage] 
+    end  
 
     def max_size
       opts[:max_size]
