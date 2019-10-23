@@ -394,7 +394,7 @@ module Tus
     def handle_cors!
       origin = request.headers["Origin"]
 
-      return if origin.to_s == ""
+      return unless opts[:request_origins].include?(origin.to_s)
 
       response.headers["Access-Control-Allow-Origin"] = origin
 
