@@ -79,7 +79,8 @@ module Tus
       # upload can be retrieved in a streaming fashion. Accepts an optional
       # range parameter for selecting a subset of bytes to retrieve.
       def get_file(uid, info = {}, range: nil)
-        file = file_path(uid).open("rb")
+        fname = uid.concat(".mp4")
+        file = file_path(fname).open("rb")
         length = range ? range.size : file.size
 
         # Create an Enumerator which will yield chunks of the requested file
@@ -96,7 +97,7 @@ module Tus
           end
         end
 
-        Response.new(chunks: chunks, close: file.method(:close), path: file_path(uid).to_s)
+        Response.new(chunks: chunks, close: file.method(:close), path: file_path(fname).to_s)
       end
 
       # Deletes data and info files for the specified upload.
